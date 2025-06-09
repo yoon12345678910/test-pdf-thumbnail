@@ -28,6 +28,7 @@ export default function PdfThumbnailGallery({
   parallel = true,
 }: Props) {
   const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
+  const [highResPage, setHighResPage] = useState<string | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
   const renderedCountRef = useRef(0);
   const startAllRef = useRef(0);
@@ -141,72 +142,125 @@ export default function PdfThumbnailGallery({
     };
   }, [file, scale, parallel]);
 
+  const handleClick = async (index: number) => {
+    const pdfjsLib = await getPdfjs();
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(index + 1);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    setHighResPage(canvas.toDataURL());
+  };
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setHighResPage(null);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '12px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        padding: '12px',
-      }}
-    >
-      {thumbnails.map((src, index) => (
-        <div
-          key={index}
-          style={{
-            width: `${maxThumbWidth}px`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
+    <>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '12px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          padding: '12px',
+        }}
+      >
+        {thumbnails.map((src, index) => (
           <div
+            key={index}
             style={{
-              width: '100%',
-              height: `${Math.round(maxThumbWidth * 1.4)}px`,
-              backgroundColor: '#f5f5f5',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+              width: `${maxThumbWidth}px`,
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
             }}
           >
-            {src ? (
-              <img
-                src={src}
-                alt={`page-${index + 1}`}
-                loading="lazy"
-                decoding="async"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'contain',
-                }}
-                onError={(e) => {
-                  e.currentTarget.src = '';
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <span
-                style={{
-                  fontSize: '12px',
-                  color: '#bbb',
-                }}
-              >
-                Loading Page {index + 1}...
-              </span>
-            )}
+            <div
+              style={{
+                width: '100%',
+                height: `${Math.round(maxThumbWidth * 1.4)}px`,
+                backgroundColor: '#f5f5f5',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleClick(index)}
+            >
+              {src ? (
+                <img
+                  src={src}
+                  alt={`page-${index + 1}`}
+                  loading="lazy"
+                  decoding="async"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                  }}
+                  onError={(e) => {
+                    e.currentTarget.src =
+                      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0nMTI4JyBoZWlnaHQ9JzEyOCcgdmlld0JveD0nMCAwIDEyOCAxMjgnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zyc+PHJlY3Qgd2lkdGg9JzEyOCcgaGVpZ2h0PScxMjgnIGZpbGw9JyNlZWUnIHJ4PScxNScvPjx0ZXh0IHg9JzY0JyB5PSc2NCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nI2NjYycgZm9udC1zaXplPScxNnB4JyBkeT0nLjMuM2VtJz5FcnJvcjwvdGV4dD48L3N2Zz4=';
+                  }}
+                />
+              ) : (
+                <span
+                  style={{
+                    fontSize: '12px',
+                    color: '#bbb',
+                  }}
+                >
+                  Loading Page {index + 1}...
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
+              Page {index + 1}
+            </span>
           </div>
-          <span style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
-            Page {index + 1}
-          </span>
+        ))}
+      </div>
+      {highResPage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setHighResPage(null)}
+        >
+          <img
+            src={highResPage}
+            alt="확대 이미지"
+            style={{ maxWidth: '90vw', maxHeight: '90vh' }}
+          />
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 } // End PdfThumbnailGallery
