@@ -1,5 +1,6 @@
 // webpack.config.js
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
   entry: './src/main.tsx',
@@ -26,10 +27,16 @@ module.exports = {
       },
       {
         test: /\.worker\.ts$/,
-        type: 'asset/resource', // 필요 시 워커에 대한 핸들링
+        type: 'asset/resource',
       },
     ],
   },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: './public/index.html',
+      filename: 'index.html',
+    }),
+  ],
   devServer: {
     static: {
       directory: path.join(__dirname, 'public'),
