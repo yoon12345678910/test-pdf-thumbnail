@@ -1,0 +1,21 @@
+# node_modules 폴더 무시
+node_modules/
+
+# 빌드 출력물 무시
+dist/
+build/
+
+# 로그 파일 무시
+*.log
+
+# 환경 변수 설정 파일 무시
+.env
+.env.*
+
+# macOS 관련 파일 무시
+.DS_Store
+
+# IDE/에디터 관련
+.vscode/
+.idea/
+*.swp
