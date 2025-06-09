@@ -1,6 +1,6 @@
 // src/components/PerformanceTest.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import PdfThumbnailGallery from './PdfThumbnailGallery';
+import PdfThumbnailGallery, { type Props } from './PdfThumbnailGallery';
 
 interface PerformanceMemory {
   usedJSHeapSize: number;
@@ -26,7 +26,9 @@ function getMemoryUsage() {
   return null;
 }
 
-export default function PerformanceTest({ file }: { file: File }) {
+export default function PerformanceTest(props: Props) {
+  const {file, parallel = true, scale = 0.2 } = props;
+
   const [fps, setFps] = useState(0);
   const [renderTimes, setRenderTimes] = useState<number[]>([]);
   const [totalRenderTime, setTotalRenderTime] = useState<number | null>(null);
@@ -104,6 +106,8 @@ export default function PerformanceTest({ file }: { file: File }) {
       </div>
       <PdfThumbnailGallery
         file={file}
+        parallel={parallel}
+        scale={scale}
         onPageRendered={(ms, isTotal) => {
           if (isTotal) {
             setTotalRenderTime(ms);

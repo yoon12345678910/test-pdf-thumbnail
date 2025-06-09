@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getPdfjs } from '../utils/pdfLoader';
 
-interface Props {
+export interface Props {
   file: File;
   scale?: number;
   maxThumbWidth?: number;
