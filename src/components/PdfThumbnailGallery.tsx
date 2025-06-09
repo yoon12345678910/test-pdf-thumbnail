@@ -1,82 +1,123 @@
 // src/components/PdfThumbnailGallery.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { getPdfjs } from '../utils/pdfLoader';
 
 interface Props {
-  file?: File;
-  url?: string;
+  file: File;
   scale?: number;
   maxThumbWidth?: number;
-  onPageRendered?: (ms: number) => void;
+  onPageRendered?: (ms: number, isTotal?: boolean) => void;
+  onFirstVisible?: (ms: number) => void;
+  parallel?: boolean;
 }
 
 export default function PdfThumbnailGallery({
   file,
-  url,
-  scale = 1.5,
-  maxThumbWidth = 180,
+  scale = 0.3,
+  maxThumbWidth = 80,
   onPageRendered,
+  onFirstVisible,
+  parallel = false,
 }: Props) {
   const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
+  const objectUrlsRef = useRef<string[]>([]);
+  const renderedCountRef = useRef(0);
+  const startAllRef = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const revokeObjectUrls = () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current = [];
+    };
+
     const renderAllPages = async () => {
+      revokeObjectUrls();
+      startAllRef.current = performance.now();
       const pdfjsLib = await getPdfjs();
-
-      let data: Uint8Array | ArrayBuffer;
-      if (file) {
-        data = await file.arrayBuffer();
-      } else if (url) {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('PDF URL 요청 실패');
-        data = await res.arrayBuffer();
-      } else {
-        return;
-      }
-
+      const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({
-        data
+        data: arrayBuffer,
+        cMapUrl: '/cmaps/',
+        cMapPacked: true,
       }).promise;
 
       const pageCount = pdf.numPages;
       const results: (string | null)[] = Array(pageCount).fill(null);
       setThumbnails(results);
 
-      for (let i = 0; i < pageCount; i++) {
+      const renderPage = async (i: number) => {
         try {
           const page = await pdf.getPage(i + 1);
           const viewport = page.getViewport({ scale });
 
           const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-
           canvas.width = viewport.width;
           canvas.height = viewport.height;
 
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
+          const ctx = canvas.getContext('2d', { alpha: false });
+          if (!ctx) return;
+
+          ctx.imageSmoothingEnabled = false;
 
           const start = performance.now();
           await page.render({ canvasContext: ctx, viewport }).promise;
-          const dataUrl = canvas.toDataURL('image/png');
+
+          const blob = await new Promise<Blob>((resolve) =>
+            canvas.toBlob((b) => b && resolve(b), 'image/webp', 0.5)
+          );
+
+          canvas.width = 0;
+          canvas.height = 0;
+          canvas.remove();
+
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current[i] = url;
+
           const end = performance.now();
 
-          onPageRendered?.(end - start);
+          if (i === 0) {
+            const firstVisible = performance.now();
+            onFirstVisible?.(firstVisible - startAllRef.current);
+          }
 
-          setThumbnails((prev) => {
-            const updated = [...prev];
-            updated[i] = dataUrl;
-            return updated;
-          });
+          onPageRendered?.(end - start, false);
+
+          if (!cancelled) {
+            setThumbnails((prev) => {
+              const updated = [...prev];
+              updated[i] = url;
+              return updated;
+            });
+          }
+
+          renderedCountRef.current++;
+          if (renderedCountRef.current === pageCount) {
+            const endAll = performance.now();
+            onPageRendered?.(endAll - startAllRef.current, true);
+          }
         } catch (e) {
           console.error(`페이지 ${i + 1} 렌더링 실패`, e);
+        }
+      };
+
+      if (parallel) {
+        await Promise.allSettled(Array.from({ length: pageCount }, (_, i) => renderPage(i)));
+      } else {
+        for (let i = 0; i < pageCount; i++) {
+          await renderPage(i);
         }
       }
     };
 
     renderAllPages();
-  }, [file, url, scale]);
+
+    return () => {
+      cancelled = true;
+      revokeObjectUrls();
+    };
+  }, [file, scale, parallel]);
 
   return (
     <div
@@ -89,52 +130,61 @@ export default function PdfThumbnailGallery({
         padding: '12px',
       }}
     >
-      {thumbnails.map((src, index) =>
-        src ? (
+      {thumbnails.map((src, index) => (
+        <div
+          key={index}
+          style={{
+            width: `${maxThumbWidth}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
+        >
           <div
-            key={index}
             style={{
-              width: `${maxThumbWidth}px`,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
-            <img
-              src={src}
-              alt={`page-${index + 1}`}
-              style={{
-                width: '100%',
-                height: 'auto',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-              }}
-            />
-            <span style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
-              Page {index + 1}
-            </span>
-          </div>
-        ) : (
-          <div
-            key={index}
-            style={{
-              width: `${maxThumbWidth}px`,
+              width: '100%',
               height: `${Math.round(maxThumbWidth * 1.4)}px`,
               backgroundColor: '#f5f5f5',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '12px',
-              color: '#bbb',
-              border: '1px dashed #ccc',
-              borderRadius: '4px',
             }}
           >
-            Loading Page {index + 1}...
+            {src ? (
+              <img
+                src={src}
+                alt={`page-${index + 1}`}
+                loading="lazy"
+                decoding="async"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                }}
+                onError={(e) => {
+                  e.currentTarget.src = '';
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontSize: '12px',
+                  color: '#bbb',
+                }}
+              >
+                Loading Page {index + 1}...
+              </span>
+            )}
           </div>
-        )
-      )}
+          <span style={{ fontSize: '12px', marginTop: '4px', color: '#666' }}>
+            Page {index + 1}
+          </span>
+        </div>
+      ))}
     </div>
   );
-}
+} // End PdfThumbnailGallery

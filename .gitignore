@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 
+public/cmaps/
+
 # 로그 파일 무시
 *.log
 
@@ -19,3 +21,4 @@ build/
 .vscode/
 .idea/
 *.swp
+
