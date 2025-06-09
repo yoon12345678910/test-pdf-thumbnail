@@ -21,7 +21,7 @@ const CONCURRENCY_LIMIT = getOptimalConcurrency();
 
 export default function PdfThumbnailGallery({
   file,
-  scale = 0.3,
+  scale = 0.2, // 해상도 더 낮춤
   maxThumbWidth = 80,
   onPageRendered,
   onFirstVisible,
@@ -76,7 +76,7 @@ export default function PdfThumbnailGallery({
           await page.render({ canvasContext: ctx, viewport }).promise;
 
           const blob = await new Promise<Blob>((resolve) =>
-            canvas.toBlob((b) => b && resolve(b), 'image/webp', 0.7)
+            canvas.toBlob((b) => b && resolve(b), 'image/webp', 0.2) // 품질 더 낮춤
           );
 
           canvas.width = 0;
