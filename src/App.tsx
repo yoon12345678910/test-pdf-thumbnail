@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import PdfThumbnailGallery from './components/PdfThumbnailGallery';
+import PerformanceTest from './components/PerformanceTest';
 
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -46,7 +46,7 @@ export default function App() {
       </div>
 
       {file && (
-        <PdfThumbnailGallery
+        <PerformanceTest
           file={file}
           scale={scale}
           parallel={parallel}
