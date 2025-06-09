@@ -11,13 +11,21 @@ interface Props {
   parallel?: boolean;
 }
 
+// 최적의 동시 렌더링 수를 시스템에 맞게 자동 조정하거나 기본값으로 4 사용
+const getOptimalConcurrency = () => {
+  const cores = navigator.hardwareConcurrency || 4;
+  return Math.max(2, Math.min(cores - 1, 6)); // 2~6 사이로 제한
+};
+
+const CONCURRENCY_LIMIT = getOptimalConcurrency();
+
 export default function PdfThumbnailGallery({
   file,
   scale = 0.3,
   maxThumbWidth = 80,
   onPageRendered,
   onFirstVisible,
-  parallel = false,
+  parallel = true,
 }: Props) {
   const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
@@ -37,10 +45,13 @@ export default function PdfThumbnailGallery({
       startAllRef.current = performance.now();
       const pdfjsLib = await getPdfjs();
       const arrayBuffer = await file.arrayBuffer();
+      // @ts-ignore
+      const worker = new pdfjsLib.PDFWorker({ name: 'pdf-worker' });
       const pdf = await pdfjsLib.getDocument({
         data: arrayBuffer,
         cMapUrl: '/cmaps/',
         cMapPacked: true,
+        worker,
       }).promise;
 
       const pageCount = pdf.numPages;
@@ -65,7 +76,7 @@ export default function PdfThumbnailGallery({
           await page.render({ canvasContext: ctx, viewport }).promise;
 
           const blob = await new Promise<Blob>((resolve) =>
-            canvas.toBlob((b) => b && resolve(b), 'image/webp', 0.5)
+            canvas.toBlob((b) => b && resolve(b), 'image/webp', 0.7)
           );
 
           canvas.width = 0;
@@ -103,12 +114,23 @@ export default function PdfThumbnailGallery({
       };
 
       if (parallel) {
-        await Promise.allSettled(Array.from({ length: pageCount }, (_, i) => renderPage(i)));
+        const queue: Promise<any>[] = [];
+        for (let i = 0; i < pageCount; i++) {
+          const task = renderPage(i);
+          queue.push(task);
+          if (queue.length >= CONCURRENCY_LIMIT) {
+            await Promise.race(queue);
+            queue.splice(0, 1);
+          }
+        }
+        await Promise.allSettled(queue);
       } else {
         for (let i = 0; i < pageCount; i++) {
           await renderPage(i);
         }
       }
+
+      await worker.destroy();
     };
 
     renderAllPages();
